@@ -1,0 +1,11 @@
+{
+  "name": "shaylyn-aws-app",
+  "version": "1.0.0",
+  "description": "Node.js app deployed on AWS EC2",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "Shaylyn",
+  "license": "MIT"
+}
