@@ -23,3 +23,4 @@
 {"level":"info","message":"::ffff:127.0.0.1 - - [19/Mar/2026:18:19:33 +0000] \"GET / HTTP/1.1\" 200 84 \"-\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36\"","timestamp":"2026-03-19T18:19:33.554Z"}
 {"level":"info","message":"::ffff:127.0.0.1 - - [19/Mar/2026:18:20:02 +0000] \"GET / HTTP/1.1\" 200 84 \"-\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0\"","timestamp":"2026-03-19T18:20:02.069Z"}
 {"level":"info","message":"::ffff:127.0.0.1 - - [19/Mar/2026:18:20:02 +0000] \"GET /favicon.ico HTTP/1.1\" 404 27 \"https://syl-awstraining.space/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0\"","timestamp":"2026-03-19T18:20:02.378Z"}
+{"level":"info","message":"::ffff:127.0.0.1 - - [24/Mar/2026:16:41:53 +0000] \"GET / HTTP/1.1\" 200 84 \"-\" \"Mozilla/5.0 zgrab/0.x\"","timestamp":"2026-03-24T16:41:53.098Z"}
