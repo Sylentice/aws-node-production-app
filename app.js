@@ -23,6 +23,8 @@ app.use(
 );
 // Health route
 app.get('/health', (req, res) => {
+  throw new Error("test failure");
+  });
   res.json({
     status: "OK - Day32",
     uptime: process.uptime(),
