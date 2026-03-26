@@ -24,7 +24,7 @@ app.use(
 // Health route
 app.get('/health', (req, res) => {
   res.json({
-    status: "OK",
+    status: "OK - v2",
     uptime: process.uptime(),
     timestamp: new Date()
   });
