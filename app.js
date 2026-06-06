@@ -1,3 +1,4 @@
+const os = require("os");
 const morgan = require("morgan");
 const logger = require("./utils/logger");
 const errorHandler = require("./middleware/errorHandler");
@@ -22,12 +23,26 @@ app.use(
   })
 );
 // Health route
-app.get('/health', (req, res) => {
-  res.json({
-    status: "OK - Day32",
-    uptime: process.uptime(),
-    timestamp: new Date()
-  });
+app.get("/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+
+    res.status(200).json({
+      status: "OK",
+      database: "connected",
+      hostname: os.hostname(),
+      uptime: process.uptime(),
+      timestamp: new Date()
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      status: "ERROR",
+      hostname: os.hostname(),
+      database: "disconnected",
+      error: err.message
+    });
+  }
 });
 
 // DB test route
