@@ -23,10 +23,16 @@ jobs:
             cd /var/www/myapp
             git pull origin main
             docker-compose down
-            docker-compose up -d --build
+            docker-compose up -d --build --scale api=3
 
             # wait for app to start
-            sleep 10
-
+            sleep 30
+            #
+            docker ps
             # health check
-            curl -f http://localhost:3001/health
+            for i in {1..5}; do
+              curl -f http://localhost/health
+              echo
+              sleep 2
+            done
+            
