@@ -19,20 +19,45 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /var/www/myapp
-            git pull origin main
-            docker-compose down
-            docker-compose up -d --build --scale api=3
-
-            # wait for app to start
-            sleep 30
-            #
-            docker ps
-            # health check
-            for i in {1..5}; do
-              curl -f http://localhost/health
-              echo
-              sleep 2
-            done
-            
+         script: |
+           set -e
+         
+           cd /var/www/myapp
+           git pull origin main
+         
+           docker-compose down
+           docker-compose up -d --build --scale api=3
+         
+           echo "Waiting for application health..."
+         
+           healthy=false
+         
+           for i in $(seq 1 12); do
+             if curl -fsS http://localhost/health; then
+               echo
+               echo "Application is healthy"
+               healthy=true
+               break
+             fi
+         
+             echo "Health check attempt $i failed; retrying..."
+             sleep 5
+           done
+         
+           if [ "$healthy" != "true" ]; then
+             echo "Deployment failed: application never became healthy"
+             docker ps
+             docker-compose logs --tail=50
+             exit 1
+           fi
+         
+           api_count=$(docker-compose ps -q api | wc -l)
+         
+           if [ "$api_count" -ne 3 ]; then
+             echo "Deployment failed: expected 3 API containers, found $api_count"
+             docker ps
+             exit 1
+           fi
+         
+           echo "Verified 3 API containers"
+           docker ps
