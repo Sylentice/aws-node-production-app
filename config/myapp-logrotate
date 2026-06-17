@@ -1,0 +1,14 @@
+/var/www/myapp/monitor.log
+/var/www/myapp/backups/backup.log
+/var/www/myapp/logs/*.log
+{
+    daily
+    rotate 7
+    maxsize 10M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su ubuntu ubuntu
+}
