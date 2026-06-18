@@ -6,13 +6,39 @@ on:
       - main
 
 jobs:
-  deploy:
+  validate:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check server.js
+          node --check app.js
+          node --check db.js
+
+      - name: Build API image
+        run: docker build -t myapp-api:ci .
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -20,44 +46,43 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-           set -e
-         
-           cd /var/www/myapp
-           git pull origin main
-         
-           docker-compose down
-           docker-compose up -d --build --scale api=3
-         
-           echo "Waiting for application health..."
-         
-           healthy=false
-         
-           for i in $(seq 1 12); do
-             if curl -fsS http://localhost/health; then
-               echo
-               echo "Application is healthy"
-               healthy=true
-               break
-             fi
-         
-             echo "Health check attempt $i failed; retrying..."
-             sleep 5
-           done
-         
-           if [ "$healthy" != "true" ]; then
-             echo "Deployment failed: application never became healthy"
-             docker ps
-             docker-compose logs --tail=50
-             exit 1
-           fi
-         
-           api_count=$(docker-compose ps -q api | wc -l)
-         
-           if [ "$api_count" -ne 3 ]; then
-             echo "Deployment failed: expected 3 API containers, found $api_count"
-             docker ps
-             exit 1
-           fi
-         
-           echo "Verified 3 API containers"
-           docker ps
+            set -e
+
+            cd /var/www/myapp
+            git pull origin main
+
+            docker-compose down
+            docker-compose up -d --build --scale api=3
+
+            echo "Waiting for application health..."
+            healthy=false
+
+            for i in $(seq 1 12); do
+              if curl -fsS http://localhost/health; then
+                echo
+                echo "Application is healthy"
+                healthy=true
+                break
+              fi
+
+              echo "Health check attempt $i failed; retrying..."
+              sleep 5
+            done
+
+            if [ "$healthy" != "true" ]; then
+              echo "Deployment failed: application never became healthy"
+              docker ps
+              docker-compose logs --tail=50
+              exit 1
+            fi
+
+            api_count=$(docker-compose ps -q api | wc -l)
+
+            if [ "$api_count" -ne 3 ]; then
+              echo "Deployment failed: expected 3 API containers, found $api_count"
+              docker ps
+              exit 1
+            fi
+
+            echo "Verified 3 API containers"
+            docker ps
