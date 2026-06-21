@@ -126,7 +126,7 @@ async function loginUser(req, res, next) {
 
     const token = jwt.sign(
       { id: user.id, email: user.email },
-      "supersecretkey",
+      process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
 

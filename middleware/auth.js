@@ -9,7 +9,7 @@ function authenticateToken(req, res, next) {
 
   const token = authHeader.split(" ")[1];
 
-  jwt.verify(token, "supersecretkey", (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
       return res.status(403).json({ error: "Invalid or expired token" });
     }

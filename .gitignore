@@ -5,3 +5,10 @@ logs/
 backups/
 npm-debug.log
 .DS_Store
+
+# Editor backup files
+*.save
+*.save.*
+
+# Rotated log files
+*.log.*
