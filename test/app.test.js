@@ -59,3 +59,39 @@ test("responses include security headers", async () => {
   assert.equal(response.headers["referrer-policy"], "no-referrer");
   assert.equal(response.headers["x-powered-by"], undefined);
 });
+
+test("GET /live reports the app process is alive", async () => {
+  const response = await request(app).get("/live");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.status, "OK");
+  assert.equal(response.body.service, "alive");
+  assert.equal(typeof response.body.hostname, "string");
+});
+
+test("GET /ready reports the app is ready when database is connected", async (t) => {
+  t.mock.method(pool, "query", async (sql) => {
+    assert.equal(sql, "SELECT 1");
+    return { rows: [] };
+  });
+
+  const response = await request(app).get("/ready");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.status, "OK");
+  assert.equal(response.body.service, "ready");
+  assert.equal(response.body.database, "connected");
+});
+
+test("GET /ready reports not ready when database is disconnected", async (t) => {
+  t.mock.method(pool, "query", async () => {
+    throw new Error("Test database failure");
+  });
+
+  const response = await request(app).get("/ready");
+
+  assert.equal(response.status, 500);
+  assert.equal(response.body.status, "ERROR");
+  assert.equal(response.body.service, "not ready");
+  assert.equal(response.body.database, "disconnected");
+});

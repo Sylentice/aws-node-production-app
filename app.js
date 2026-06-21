@@ -1,5 +1,6 @@
 require("./config/env");
 
+const pool = require('./db');
 const os = require("os");
 const helmet = require("helmet");
 const morgan = require("morgan");
@@ -30,13 +31,25 @@ app.use(
     }
   })
 );
-// Health route
-app.get("/health", async (req, res) => {
+
+// Liveness route
+app.get("/live", (req, res) => {
+  res.status(200).json({
+    status: "OK",
+    service: "alive",
+    hostname: os.hostname(),
+    uptime: process.uptime(),
+    timestamp: new Date()
+  });
+});
+
+async function readinessHandler(req, res) {
   try {
     await pool.query("SELECT 1");
 
     res.status(200).json({
       status: "OK",
+      service: "ready",
       database: "connected",
       hostname: os.hostname(),
       uptime: process.uptime(),
@@ -46,15 +59,21 @@ app.get("/health", async (req, res) => {
   } catch (err) {
     res.status(500).json({
       status: "ERROR",
+      service: "not ready",
       hostname: os.hostname(),
       database: "disconnected",
       error: err.message
     });
   }
-});
+}
+
+// Readiness route
+app.get("/ready", readinessHandler);
+
+// Compatibility health route
+app.get("/health", readinessHandler);
 
 // DB test route
-const pool = require('./db');
 app.get('/db-test', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');

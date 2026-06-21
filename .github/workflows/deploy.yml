@@ -57,13 +57,13 @@ jobs:
             docker-compose down
             docker-compose up -d --build --scale api=3
 
-            echo "Waiting for application health..."
+            echo "Waiting for application readiness..."
             healthy=false
 
             for i in $(seq 1 12); do
-              if curl -fsS http://localhost/health; then
+              if curl -fsS http://localhost/ready; then
                 echo
-                echo "Application is healthy"
+                echo "Application is ready"
                 healthy=true
                 break
               fi
