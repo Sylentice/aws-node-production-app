@@ -1,6 +1,10 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
+function sanitizeUser(user) {
+  const { password, ...safeUser } = user;
+  return safeUser;
+}
 
 async function createUser(req, res, next) {
   try {
@@ -15,7 +19,7 @@ async function createUser(req, res, next) {
 
     res.status(201).json({
       message: "User created successfully",
-      user: result.rows[0]
+      user: sanitizeUser(result.rows[0])
     });
   } catch (err) {
     next(err);
@@ -25,7 +29,7 @@ async function getAllUsers(req, res, next) {
   try {
     const { email, name } = req.query;
 
-    let query = "SELECT * FROM users";
+    let query = "SELECT id, name, email, created_at FROM users";
     let values = [];
 
     if (email) {
@@ -39,7 +43,7 @@ async function getAllUsers(req, res, next) {
     query += " ORDER BY id ASC";
 
     const result = await pool.query(query, values);
-    res.json(result.rows);
+    res.json(result.rows.map(sanitizeUser));
   } catch (err) {
     next(err);
   }
@@ -49,7 +53,7 @@ async function getUserById(req, res, next) {
     const { id } = req.params;
 
     const result = await pool.query(
-      "SELECT * FROM users WHERE id = $1",
+      "SELECT id, name, email, created_at FROM users WHERE id = $1",
       [id]
     );
 
@@ -57,7 +61,7 @@ async function getUserById(req, res, next) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json(result.rows[0]);
+    res.json(sanitizeUser(result.rows[0]));
   } catch (err) {
     next(err);
   }
@@ -68,7 +72,7 @@ async function updateUser(req, res, next) {
     const { name, email } = req.body;
 
     const result = await pool.query(
-      "UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING *",
+      "UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING id, name, email, created_at",
       [name, email, id]
     );
 
@@ -78,7 +82,7 @@ async function updateUser(req, res, next) {
 
     res.json({
       message: "User updated successfully",
-      user: result.rows[0]
+      user: sanitizeUser(result.rows[0])
     });
   }
     catch (err) {
@@ -108,7 +112,7 @@ async function loginUser(req, res, next) {
     const { email, password } = req.body;
 
     const result = await pool.query(
-      "SELECT * FROM users WHERE email = $1",
+      "SELECT id, email, password FROM users WHERE email = $1",
       [email]
     );
 

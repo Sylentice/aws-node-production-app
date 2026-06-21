@@ -37,7 +37,7 @@ test("GET /users allows a valid token and returns users", async (t) => {
   );
 
   t.mock.method(pool, "query", async (sql, values) => {
-    assert.equal(sql, "SELECT * FROM users ORDER BY id ASC");
+    assert.equal(sql, "SELECT id, name, email, created_at FROM users ORDER BY id ASC");
     assert.deepEqual(values, []);
 
     return {
@@ -98,7 +98,7 @@ test("POST /users/login returns a JWT for valid credentials", async (t) => {
   const hashedPassword = await bcrypt.hash("password123", 10);
 
   t.mock.method(pool, "query", async (sql, values) => {
-    assert.equal(sql, "SELECT * FROM users WHERE email = $1");
+    assert.equal(sql, "SELECT id, email, password FROM users WHERE email = $1");
     assert.deepEqual(values, ["test@example.com"]);
 
     return {
@@ -183,5 +183,70 @@ test("POST /users rejects short passwords", async () => {
   assert.equal(response.status, 400);
   assert.deepEqual(response.body, {
     error: "Password must be at least 8 characters long"
+  });
+});
+
+test("GET /users does not expose password hashes", async (t) => {
+  const token = jwt.sign(
+    { id: 1, email: "test@example.com" },
+    process.env.JWT_SECRET,
+    { expiresIn: "1h" }
+  );
+
+  t.mock.method(pool, "query", async () => {
+    return {
+      rows: [
+        {
+          id: 1,
+          name: "Test User",
+          email: "test@example.com",
+          password: "hashed-password-value",
+          created_at: "2026-06-21T00:00:00.000Z"
+        }
+      ]
+    };
+  });
+
+  const response = await request(app)
+    .get("/users")
+    .set("Authorization", `Bearer ${token}`);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body[0].password, undefined);
+  assert.deepEqual(response.body[0], {
+    id: 1,
+    name: "Test User",
+    email: "test@example.com",
+    created_at: "2026-06-21T00:00:00.000Z"
+  });
+});
+
+test("GET /users/:id does not expose password hashes", async (t) => {
+  t.mock.method(pool, "query", async (sql, values) => {
+    assert.equal(sql, "SELECT id, name, email, created_at FROM users WHERE id = $1");
+    assert.deepEqual(values, ["1"]);
+
+    return {
+      rows: [
+        {
+          id: 1,
+          name: "Test User",
+          email: "test@example.com",
+          password: "hashed-password-value",
+          created_at: "2026-06-21T00:00:00.000Z"
+        }
+      ]
+    };
+  });
+
+  const response = await request(app).get("/users/1");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.password, undefined);
+  assert.deepEqual(response.body, {
+    id: 1,
+    name: "Test User",
+    email: "test@example.com",
+    created_at: "2026-06-21T00:00:00.000Z"
   });
 });
