@@ -1,3 +1,5 @@
+require("./config/env");
+
 const os = require("os");
 const helmet = require("helmet");
 const morgan = require("morgan");
