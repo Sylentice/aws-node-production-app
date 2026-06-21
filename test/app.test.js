@@ -48,3 +48,13 @@ test("GET /health reports a disconnected database", async (t) => {
   assert.equal(response.body.status, "ERROR");
   assert.equal(response.body.database, "disconnected");
 });
+
+test("responses include security headers", async () => {
+  const response = await request(app).get("/");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers["x-content-type-options"], "nosniff");
+  assert.equal(response.headers["x-frame-options"], "SAMEORIGIN");
+  assert.equal(response.headers["referrer-policy"], "no-referrer");
+  assert.equal(response.headers["x-powered-by"], undefined);
+});
