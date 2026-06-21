@@ -65,7 +65,7 @@ test("GET /users allows a valid token and returns users", async (t) => {
   ]);
 });
 
-test("POST /users requires name and email", async () => {
+test("POST /users requires name, email, and password", async () => {
   const response = await request(app)
     .post("/users")
     .send({
@@ -75,7 +75,7 @@ test("POST /users requires name and email", async () => {
 
   assert.equal(response.status, 400);
   assert.deepEqual(response.body, {
-    error: "Name and email are required"
+    error: "Name, email, and password are required"
   });
 });
 
@@ -154,5 +154,34 @@ test("POST /users/login rejects invalid credentials", async (t) => {
   assert.equal(response.status, 401);
   assert.deepEqual(response.body, {
     error: "Invalid credentials"
+  });
+});
+
+test("POST /users requires a password", async () => {
+  const response = await request(app)
+    .post("/users")
+    .send({
+      name: "Test User",
+      email: "test@example.com"
+    });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, {
+    error: "Name, email, and password are required"
+  });
+});
+
+test("POST /users rejects short passwords", async () => {
+  const response = await request(app)
+    .post("/users")
+    .send({
+      name: "Test User",
+      email: "test@example.com",
+      password: "short"
+    });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, {
+    error: "Password must be at least 8 characters long"
   });
 });
