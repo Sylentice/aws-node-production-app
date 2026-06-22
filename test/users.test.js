@@ -251,3 +251,46 @@ test("GET /users/:id does not expose password hashes", async (t) => {
     created_at: "2026-06-21T00:00:00.000Z"
   });
 });
+
+test("POST /users duplicate value errors include the request ID", async (t) => {
+  const requestId = "shay-duplicate-error-test-id";
+
+  t.mock.method(pool, "query", async () => {
+    const error = new Error("duplicate key value violates unique constraint");
+    error.code = "23505";
+    throw error;
+  });
+
+  const response = await request(app)
+    .post("/users")
+    .set("X-Request-Id", requestId)
+    .send({
+      name: "Test User",
+      email: "test@example.com",
+      password: "password123"
+    });
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(response.body, {
+    error: "Duplicate value violates unique constraint",
+    requestId
+  });
+});
+
+test("unexpected server errors include the request ID", async (t) => {
+  const requestId = "shay-unexpected-error-test-id";
+
+  t.mock.method(pool, "query", async () => {
+    throw new Error("Simulated database failure");
+  });
+
+  const response = await request(app)
+    .get("/users/1")
+    .set("X-Request-Id", requestId);
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(response.body, {
+    error: "Internal server error",
+    requestId
+  });
+});
