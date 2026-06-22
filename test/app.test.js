@@ -95,3 +95,25 @@ test("GET /ready reports not ready when database is disconnected", async (t) => 
   assert.equal(response.body.service, "not ready");
   assert.equal(response.body.database, "disconnected");
 });
+
+test("responses include a generated request ID", async () => {
+  const response = await request(app).get("/");
+
+  assert.equal(response.status, 200);
+  assert.equal(typeof response.headers["x-request-id"], "string");
+  assert.match(
+    response.headers["x-request-id"],
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  );
+});
+
+test("responses preserve an incoming request ID", async () => {
+  const requestId = "shay-test-request-id";
+
+  const response = await request(app)
+    .get("/")
+    .set("X-Request-Id", requestId);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers["x-request-id"], requestId);
+});

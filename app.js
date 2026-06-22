@@ -6,6 +6,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const logger = require("./utils/logger");
 const errorHandler = require("./middleware/errorHandler");
+const requestId = require("./middleware/requestId");
 const express = require('express');
 const usersRoutes = require('./routes/users');
 const rateLimit = require('express-rate-limit');
@@ -16,6 +17,11 @@ app.disable("x-powered-by");
 app.set('trust proxy', 1);
 
 app.use(helmet());
+
+app.use(requestId);
+
+morgan.token("request-id", (req) => req.id || "-");
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -25,7 +31,7 @@ app.use(limiter);
 app.use(express.json());
 //Logger
 app.use(
-  morgan("combined", {
+  morgan(":remote-addr :request-id - :method :url :status :res[content-length] - :response-time ms", {
     stream: {
       write: (message) => logger.info(message.trim())
     }
