@@ -54,8 +54,7 @@ jobs:
             cd /var/www/myapp
             git pull origin main
 
-            docker-compose down
-            docker-compose up -d --build --scale api=3
+            docker-compose up -d --build --scale api=3 --remove-orphans
 
             echo "Waiting for application readiness..."
             healthy=false
