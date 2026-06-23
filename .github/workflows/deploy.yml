@@ -21,10 +21,10 @@ jobs:
 
       - name: Install exact dependencies
         run: npm ci
-        
+
       - name: Run automated tests
         run: npm test
-        
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
@@ -52,39 +52,83 @@ jobs:
             set -e
 
             cd /var/www/myapp
-            git pull origin main
 
-            docker-compose up -d --build --scale api=3 --remove-orphans
+            previous_commit=$(git rev-parse HEAD)
+            echo "Previous deployed commit: $previous_commit"
 
-            echo "Waiting for application readiness..."
-            healthy=false
+            git fetch origin main
+            git reset --hard origin/main
 
-            for i in $(seq 1 12); do
-              if curl -fsS http://localhost/ready; then
-                echo
-                echo "Application is ready"
-                healthy=true
-                break
+            new_commit=$(git rev-parse HEAD)
+            echo "Deploying commit: $new_commit"
+
+            wait_for_ready() {
+              label="$1"
+              ready=false
+
+              for i in $(seq 1 12); do
+                if curl -fsS http://localhost/ready; then
+                  echo
+                  echo "$label is ready"
+                  ready=true
+                  break
+                fi
+
+                echo "$label readiness attempt $i failed; retrying..."
+                sleep 5
+              done
+
+              if [ "$ready" != "true" ]; then
+                return 1
+              fi
+            }
+
+            verify_api_count() {
+              api_count=$(docker-compose ps -q api | wc -l)
+
+              if [ "$api_count" -ne 3 ]; then
+                echo "Expected 3 API containers, found $api_count"
+                docker ps
+                return 1
               fi
 
-              echo "Health check attempt $i failed; retrying..."
-              sleep 5
-            done
+              echo "Verified 3 API containers"
+            }
 
-            if [ "$healthy" != "true" ]; then
-              echo "Deployment failed: application never became healthy"
-              docker ps
+            rollback() {
+              echo "Deployment failed. Rolling back to previous commit: $previous_commit"
+
+              git reset --hard "$previous_commit"
+
+              docker-compose up -d --build --scale api=3 --remove-orphans
+
+              echo "Waiting for rollback readiness..."
+
+              if wait_for_ready "Rollback"; then
+                echo "Rollback completed successfully"
+                docker ps
+              else
+                echo "Rollback failed to become ready"
+                docker ps
+                docker-compose logs --tail=50
+              fi
+
+              exit 1
+            }
+
+            if ! docker-compose up -d --build --scale api=3 --remove-orphans; then
+              rollback
+            fi
+
+            echo "Waiting for application readiness..."
+
+            if ! wait_for_ready "Application"; then
               docker-compose logs --tail=50
-              exit 1
+              rollback
             fi
 
-            api_count=$(docker-compose ps -q api | wc -l)
-
-            if [ "$api_count" -ne 3 ]; then
-              echo "Deployment failed: expected 3 API containers, found $api_count"
-              docker ps
-              exit 1
+            if ! verify_api_count; then
+              rollback
             fi
 
-            echo "Verified 3 API containers"
             docker ps
