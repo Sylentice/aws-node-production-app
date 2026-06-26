@@ -34,6 +34,9 @@ jobs:
           node --check app.js
           node --check db.js
 
+      - name: Check deployment verification script syntax
+        run: bash -n scripts/verify_deployment.sh
+
       - name: Build API image
         run: docker build -t myapp-api:ci .
 
@@ -62,113 +65,24 @@ jobs:
             new_commit=$(git rev-parse HEAD)
             echo "Deploying commit: $new_commit"
 
-            wait_for_ready() {
-              label="$1"
-              ready=false
-
-              for i in $(seq 1 12); do
-                if curl -fsS http://localhost/ready; then
-                  echo
-                  echo "$label is ready"
-                  ready=true
-                  break
-                fi
-
-                echo "$label readiness attempt $i failed; retrying..."
-                sleep 5
-              done
-
-              if [ "$ready" != "true" ]; then
-                return 1
-              fi
-            }
-
-            verify_api_count() {
-              api_count=$(docker-compose ps -q api | wc -l)
-
-              if [ "$api_count" -ne 3 ]; then
-                echo "Expected 3 API containers, found $api_count"
-                docker ps
-                return 1
-              fi
-
-              echo "Verified 3 API containers"
-            }
-
-            verify_version() {
-              expected_commit="$1"
-
-              echo "Verifying load-balanced /version reports commit: $expected_commit"
-
-              version_response=$(curl -fsS http://localhost/version || true)
-
-              if [ -z "$version_response" ]; then
-                echo "Version endpoint did not return a response"
-                return 1
-              fi
-
-              echo "$version_response"
-
-              if ! echo "$version_response" | grep -q "$expected_commit"; then
-                echo "Version verification failed. Expected commit was not found in /version response."
-                return 1
-              fi
-
-              echo "Verified load-balanced deployed version commit"
-            }
-
-            verify_all_api_versions() {
-              expected_commit="$1"
-              containers=$(docker-compose ps -q api)
-
-              if [ -z "$containers" ]; then
-                echo "No API containers found for per-replica version verification"
-                return 1
-              fi
-
-              echo "Verifying every API replica reports commit: $expected_commit"
-
-              for container_id in $containers; do
-                container_name=$(docker inspect -f '{{.Name}}' "$container_id" | sed 's#^/##')
-                echo "Checking $container_name"
-
-                version_response=$(docker exec "$container_id" curl -fsS http://localhost:3000/version || true)
-
-                if [ -z "$version_response" ]; then
-                  echo "$container_name did not return a /version response"
-                  return 1
-                fi
-
-                echo "$version_response"
-
-                if ! echo "$version_response" | grep -q "$expected_commit"; then
-                  echo "$container_name is not running expected commit $expected_commit"
-                  return 1
-                fi
-              done
-
-              echo "Verified every API replica reports the expected commit"
-            }
-
             rollback() {
               echo "Deployment failed. Rolling back to previous commit: $previous_commit"
 
               git reset --hard "$previous_commit"
 
-              GIT_COMMIT="$previous_commit" docker-compose up -d --build --scale api=3 --remove-orphans
-
-              echo "Waiting for rollback readiness..."
-
-              if wait_for_ready "Rollback"; then
-                if verify_version "$previous_commit" && verify_all_api_versions "$previous_commit"; then
-                  echo "Rollback completed successfully"
-                else
-                  echo "Rollback became ready but version verification failed"
-                fi
-
+              if ! GIT_COMMIT="$previous_commit" docker-compose up -d --build --scale api=3 --remove-orphans; then
+                echo "Rollback docker-compose update failed"
                 docker ps
+                docker-compose logs --tail=50
+                exit 1
+              fi
+
+              echo "Verifying rollback..."
+
+              if ./scripts/verify_deployment.sh "$previous_commit"; then
+                echo "Rollback completed successfully"
               else
-                echo "Rollback failed to become ready"
+                echo "Rollback verification failed"
                 docker ps
                 docker-compose logs --tail=50
               fi
@@ -180,23 +94,10 @@ jobs:
               rollback
             fi
 
-            echo "Waiting for application readiness..."
-
-            if ! wait_for_ready "Application"; then
+            if ! ./scripts/verify_deployment.sh "$new_commit"; then
               docker-compose logs --tail=50
               rollback
             fi
 
-            if ! verify_api_count; then
-              rollback
-            fi
-
-            if ! verify_version "$new_commit"; then
-              rollback
-            fi
-
-            if ! verify_all_api_versions "$new_commit"; then
-              rollback
-            fi
-
+            echo "Deployment completed successfully for commit: $new_commit"
             docker ps
