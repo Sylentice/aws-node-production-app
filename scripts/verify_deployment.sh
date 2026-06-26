@@ -5,6 +5,8 @@ expected_commit="${1:-}"
 expected_api_count="${EXPECTED_API_COUNT:-3}"
 max_ready_attempts="${MAX_READY_ATTEMPTS:-12}"
 ready_sleep_seconds="${READY_SLEEP_SECONDS:-5}"
+max_health_attempts="${MAX_HEALTH_ATTEMPTS:-12}"
+health_sleep_seconds="${HEALTH_SLEEP_SECONDS:-5}"
 
 if [ -z "$expected_commit" ]; then
   echo "Usage: $0 <expected_git_commit>"
@@ -39,6 +41,37 @@ verify_api_count() {
   fi
 
   echo "Verified $expected_api_count API containers"
+}
+
+wait_for_api_container_health() {
+  echo "Waiting for API containers to report Docker health status: healthy"
+
+  for attempt in $(seq 1 "$max_health_attempts"); do
+    all_healthy=true
+
+    for container_id in $(docker-compose ps -q api); do
+      container_name=$(docker inspect -f '{{.Name}}' "$container_id" | sed 's#^/##')
+      health_status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$container_id")
+
+      echo "$container_name health status: $health_status"
+
+      if [ "$health_status" != "healthy" ]; then
+        all_healthy=false
+      fi
+    done
+
+    if [ "$all_healthy" = "true" ]; then
+      echo "Verified all API containers are Docker-healthcheck healthy"
+      return 0
+    fi
+
+    echo "API container health attempt $attempt failed; retrying..."
+    sleep "$health_sleep_seconds"
+  done
+
+  echo "API containers did not become Docker-healthcheck healthy"
+  docker ps
+  return 1
 }
 
 verify_load_balanced_version() {
@@ -95,6 +128,7 @@ verify_all_api_versions() {
 
 wait_for_ready
 verify_api_count
+wait_for_api_container_health
 verify_load_balanced_version
 verify_all_api_versions
 
