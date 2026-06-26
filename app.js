@@ -92,7 +92,17 @@ app.get('/db-test', async (req, res) => {
 
 // Mount users routes
 app.use('/users', usersRoutes);
-
+// Version route
+app.get("/version", (req, res) => {
+  res.status(200).json({
+    service: "myapp-api",
+    commit: process.env.GIT_COMMIT || "unknown",
+    environment: process.env.NODE_ENV || "development",
+    hostname: os.hostname(),
+    uptime: process.uptime(),
+    timestamp: new Date()
+  });
+});
 // Default route
 app.get('/', (req, res) => {
   res.json({

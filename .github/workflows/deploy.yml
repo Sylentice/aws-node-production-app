@@ -100,7 +100,7 @@ jobs:
 
               git reset --hard "$previous_commit"
 
-              docker-compose up -d --build --scale api=3 --remove-orphans
+              GIT_COMMIT="$previous_commit" docker-compose up -d --build --scale api=3 --remove-orphans
 
               echo "Waiting for rollback readiness..."
 
@@ -116,7 +116,7 @@ jobs:
               exit 1
             }
 
-            if ! docker-compose up -d --build --scale api=3 --remove-orphans; then
+            if ! GIT_COMMIT="$new_commit" docker-compose up -d --build --scale api=3 --remove-orphans; then
               rollback
             fi
 

@@ -24,6 +24,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
+      GIT_COMMIT: ${GIT_COMMIT:-unknown}
+      NODE_ENV: production
     depends_on:
       - db
     restart: unless-stopped

@@ -117,3 +117,30 @@ test("responses preserve an incoming request ID", async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers["x-request-id"], requestId);
 });
+
+test("GET /version returns deployment metadata", async () => {
+  const response = await request(app).get("/version");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.service, "myapp-api");
+  assert.equal(typeof response.body.commit, "string");
+  assert.equal(typeof response.body.environment, "string");
+  assert.equal(typeof response.body.hostname, "string");
+  assert.equal(Number.isNaN(Date.parse(response.body.timestamp)), false);
+});
+
+test("GET /version uses GIT_COMMIT when provided", async () => {
+  const originalCommit = process.env.GIT_COMMIT;
+  process.env.GIT_COMMIT = "test-commit-sha";
+
+  const response = await request(app).get("/version");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.commit, "test-commit-sha");
+
+  if (originalCommit === undefined) {
+    delete process.env.GIT_COMMIT;
+  } else {
+    process.env.GIT_COMMIT = originalCommit;
+  }
+});
