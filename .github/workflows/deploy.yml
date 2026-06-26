@@ -98,7 +98,7 @@ jobs:
             verify_version() {
               expected_commit="$1"
 
-              echo "Verifying deployed version reports commit: $expected_commit"
+              echo "Verifying load-balanced /version reports commit: $expected_commit"
 
               version_response=$(curl -fsS http://localhost/version || true)
 
@@ -114,7 +114,40 @@ jobs:
                 return 1
               fi
 
-              echo "Verified deployed version commit"
+              echo "Verified load-balanced deployed version commit"
+            }
+
+            verify_all_api_versions() {
+              expected_commit="$1"
+              containers=$(docker-compose ps -q api)
+
+              if [ -z "$containers" ]; then
+                echo "No API containers found for per-replica version verification"
+                return 1
+              fi
+
+              echo "Verifying every API replica reports commit: $expected_commit"
+
+              for container_id in $containers; do
+                container_name=$(docker inspect -f '{{.Name}}' "$container_id" | sed 's#^/##')
+                echo "Checking $container_name"
+
+                version_response=$(docker exec "$container_id" curl -fsS http://localhost:3000/version || true)
+
+                if [ -z "$version_response" ]; then
+                  echo "$container_name did not return a /version response"
+                  return 1
+                fi
+
+                echo "$version_response"
+
+                if ! echo "$version_response" | grep -q "$expected_commit"; then
+                  echo "$container_name is not running expected commit $expected_commit"
+                  return 1
+                fi
+              done
+
+              echo "Verified every API replica reports the expected commit"
             }
 
             rollback() {
@@ -127,7 +160,7 @@ jobs:
               echo "Waiting for rollback readiness..."
 
               if wait_for_ready "Rollback"; then
-                if verify_version "$previous_commit"; then
+                if verify_version "$previous_commit" && verify_all_api_versions "$previous_commit"; then
                   echo "Rollback completed successfully"
                 else
                   echo "Rollback became ready but version verification failed"
@@ -159,6 +192,10 @@ jobs:
             fi
 
             if ! verify_version "$new_commit"; then
+              rollback
+            fi
+
+            if ! verify_all_api_versions "$new_commit"; then
               rollback
             fi
 
