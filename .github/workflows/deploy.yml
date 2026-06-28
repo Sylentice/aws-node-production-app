@@ -39,7 +39,9 @@ jobs:
           node --check db.js
 
       - name: Check deployment verification script syntax
-        run: bash -n scripts/verify_deployment.sh
+        run:
+          bash -n scripts/verify_deployment.sh
+          bash -n scripts/record_deployment.sh
 
       - name: Build API image
         run: docker build -t myapp-api:ci .
@@ -82,6 +84,7 @@ jobs:
 
             new_commit=$(git rev-parse HEAD)
             echo "Deploying commit: $new_commit"
+            ./scripts/record_deployment.sh "started" "$new_commit" "$previous_commit" "deployment started"
 
             rollback() {
               echo "Deployment failed. Rolling back to previous commit: $previous_commit"
@@ -99,8 +102,10 @@ jobs:
 
               if ./scripts/verify_deployment.sh "$previous_commit"; then
                 echo "Rollback completed successfully"
+                ./scripts/record_deployment.sh "rollback_success" "$new_commit" "$previous_commit" "rolled back to previous commit"
               else
                 echo "Rollback verification failed"
+                ./scripts/record_deployment.sh "rollback_failed" "$new_commit" "$previous_commit" "rollback verification failed"
                 docker ps
                 docker-compose logs --tail=50
               fi
@@ -117,5 +122,8 @@ jobs:
               rollback
             fi
 
+            ./scripts/record_deployment.sh "success" "$new_commit" "$previous_commit" "deployment completed successfully"
+
             echo "Deployment completed successfully for commit: $new_commit"
+
             docker ps
