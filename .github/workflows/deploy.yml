@@ -38,8 +38,8 @@ jobs:
           node --check app.js
           node --check db.js
 
-      - name: Check deployment verification script syntax
-        run:
+      - name: Check deployment script syntax
+        run: |
           bash -n scripts/verify_deployment.sh
           bash -n scripts/record_deployment.sh
 
@@ -60,6 +60,24 @@ jobs:
           script: |
             set -e
 
+            previous_commit="unknown"
+            new_commit="unknown"
+            deployment_final_event_recorded=false
+
+            log_unexpected_failure() {
+              exit_code=$?
+
+              if [ "$exit_code" -ne 0 ] && [ "$deployment_final_event_recorded" != "true" ]; then
+                echo "Deployment exited unexpectedly with code $exit_code"
+
+                if [ -x ./scripts/record_deployment.sh ]; then
+                  ./scripts/record_deployment.sh "failed" "$new_commit" "$previous_commit" "deployment exited unexpectedly with code $exit_code" || true
+                else
+                  echo "record_deployment.sh was not available to log failure"
+                fi
+              fi
+            }
+
             if ! command -v flock >/dev/null 2>&1; then
               echo "flock is not installed on this server"
               exit 1
@@ -76,6 +94,8 @@ jobs:
 
             cd /var/www/myapp
 
+            trap log_unexpected_failure EXIT
+
             previous_commit=$(git rev-parse HEAD)
             echo "Previous deployed commit: $previous_commit"
 
@@ -84,6 +104,7 @@ jobs:
 
             new_commit=$(git rev-parse HEAD)
             echo "Deploying commit: $new_commit"
+
             ./scripts/record_deployment.sh "started" "$new_commit" "$previous_commit" "deployment started"
 
             rollback() {
@@ -93,8 +114,10 @@ jobs:
 
               if ! GIT_COMMIT="$previous_commit" docker-compose up -d --build --scale api=3 --remove-orphans; then
                 echo "Rollback docker-compose update failed"
+                ./scripts/record_deployment.sh "rollback_failed" "$new_commit" "$previous_commit" "rollback docker-compose update failed" || true
                 docker ps
                 docker-compose logs --tail=50
+                deployment_final_event_recorded=true
                 exit 1
               fi
 
@@ -105,11 +128,12 @@ jobs:
                 ./scripts/record_deployment.sh "rollback_success" "$new_commit" "$previous_commit" "rolled back to previous commit"
               else
                 echo "Rollback verification failed"
-                ./scripts/record_deployment.sh "rollback_failed" "$new_commit" "$previous_commit" "rollback verification failed"
+                ./scripts/record_deployment.sh "rollback_failed" "$new_commit" "$previous_commit" "rollback verification failed" || true
                 docker ps
                 docker-compose logs --tail=50
               fi
 
+              deployment_final_event_recorded=true
               exit 1
             }
 
@@ -125,5 +149,6 @@ jobs:
             ./scripts/record_deployment.sh "success" "$new_commit" "$previous_commit" "deployment completed successfully"
 
             echo "Deployment completed successfully for commit: $new_commit"
-
             docker ps
+
+            deployment_final_event_recorded=true
