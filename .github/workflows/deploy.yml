@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -53,6 +57,20 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
+
+            if ! command -v flock >/dev/null 2>&1; then
+              echo "flock is not installed on this server"
+              exit 1
+            fi
+
+            exec 9>/tmp/myapp-deploy.lock
+
+            if ! flock -n 9; then
+              echo "Another deployment is already running. Exiting."
+              exit 1
+            fi
+
+            echo "Acquired deployment lock"
 
             cd /var/www/myapp
 
