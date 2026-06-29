@@ -1,4 +1,5 @@
 name: Deploy to EC2
+name: Deploy to EC2
 
 on:
   push:
@@ -44,6 +45,7 @@ jobs:
           bash -n scripts/record_deployment.sh
           bash -n scripts/deployment_status.sh
           bash -n scripts/install_deployment_logrotate.sh
+          bash -n scripts/smoke_test.sh
 
       - name: Build API image
         run: docker build -t myapp-api:ci .
@@ -144,6 +146,11 @@ jobs:
             fi
 
             if ! ./scripts/verify_deployment.sh "$new_commit"; then
+              docker-compose logs --tail=50
+              rollback
+            fi
+
+            if ! ./scripts/smoke_test.sh "$new_commit"; then
               docker-compose logs --tail=50
               rollback
             fi
