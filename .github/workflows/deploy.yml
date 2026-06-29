@@ -43,6 +43,7 @@ jobs:
           bash -n scripts/verify_deployment.sh
           bash -n scripts/record_deployment.sh
           bash -n scripts/deployment_status.sh
+          bash -n scripts/install_deployment_logrotate.sh
 
       - name: Build API image
         run: docker build -t myapp-api:ci .
