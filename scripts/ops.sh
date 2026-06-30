@@ -11,6 +11,7 @@ Usage:
 Commands:
   help          Show this help menu
   status        Show app, Git, Docker, and deployment status
+  doctor        Run common health checks and show logs if something fails
   verify        Run strict deployment verification against the current Git commit
   smoke         Run production smoke tests against the current Git commit
   ps            Show Docker Compose services and myapp containers
@@ -21,6 +22,7 @@ Commands:
 
 Examples:
   ./scripts/ops.sh status
+  ./scripts/ops.sh doctor
   ./scripts/ops.sh verify
   ./scripts/ops.sh smoke
   ./scripts/ops.sh logs
@@ -31,6 +33,77 @@ current_commit() {
   git rev-parse HEAD
 }
 
+show_docker_logs() {
+  echo
+  echo "============================================================"
+  echo "Recent Docker Compose Logs"
+  echo "============================================================"
+  docker-compose logs --tail="${LOG_TAIL:-100}" || true
+}
+
+show_deployment_log() {
+  echo
+  echo "============================================================"
+  echo "Recent Deployment Audit Log"
+  echo "============================================================"
+
+  if [ -f logs/deployments.log ]; then
+    tail -n "${DEPLOY_LOG_TAIL:-20}" logs/deployments.log
+  else
+    echo "No deployment log found at logs/deployments.log"
+  fi
+}
+
+run_doctor_step() {
+  label="$1"
+  shift
+
+  echo
+  echo "============================================================"
+  echo "$label"
+  echo "============================================================"
+
+  if "$@"; then
+    echo
+    echo "$label passed"
+  else
+    echo
+    echo "$label failed"
+    doctor_failed=true
+  fi
+}
+
+run_doctor() {
+  doctor_failed=false
+
+  echo "Running ops doctor against commit: $(current_commit)"
+
+  run_doctor_step "Ready endpoint check" curl -fsS http://localhost/ready
+
+  run_doctor_step "Version endpoint check" curl -fsS http://localhost/version
+
+  run_doctor_step "Docker Compose service check" docker-compose ps
+
+  run_doctor_step "Production smoke tests" ./scripts/smoke_test.sh "$(current_commit)"
+
+  run_doctor_step "Strict deployment verification" ./scripts/verify_deployment.sh "$(current_commit)"
+
+  if [ "$doctor_failed" = "true" ]; then
+    echo
+    echo "Ops doctor found one or more failures."
+
+    show_docker_logs
+    show_deployment_log
+
+    exit 1
+  fi
+
+  echo
+  echo "============================================================"
+  echo "Ops doctor passed"
+  echo "============================================================"
+}
+
 case "$command_name" in
   help|-h|--help)
     print_help
@@ -38,6 +111,10 @@ case "$command_name" in
 
   status)
     ./scripts/deployment_status.sh
+    ;;
+
+  doctor)
+    run_doctor
     ;;
 
   verify)
@@ -57,15 +134,11 @@ case "$command_name" in
     ;;
 
   logs)
-    docker-compose logs --tail="${LOG_TAIL:-100}"
+    show_docker_logs
     ;;
 
   deploy-log)
-    if [ -f logs/deployments.log ]; then
-      tail -n "${DEPLOY_LOG_TAIL:-20}" logs/deployments.log
-    else
-      echo "No deployment log found at logs/deployments.log"
-    fi
+    show_deployment_log
     ;;
 
   version)
