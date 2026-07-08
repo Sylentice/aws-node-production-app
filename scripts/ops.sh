@@ -19,6 +19,8 @@ Commands:
   snapshot         Save a diagnostic snapshot to logs/diagnostics
   snapshots        List saved diagnostic snapshots
   clean-snapshots  Delete diagnostic snapshots older than the retention period
+  disk             Show Docker disk usage and cleanup candidates
+  clean-docker     Safely clean stopped containers and dangling Docker images
   verify           Run strict deployment verification against the current Git commit
   smoke            Run production smoke tests against the current Git commit
   ps               Show Docker Compose services and myapp containers
@@ -32,9 +34,10 @@ Examples:
   ./scripts/ops.sh doctor
   ./scripts/ops.sh snapshot
   ./scripts/ops.sh snapshots
-  ./scripts/ops.sh clean-snapshots
-  ./scripts/ops.sh clean-snapshots 30
-  DRY_RUN=true ./scripts/ops.sh clean-snapshots
+  ./scripts/ops.sh disk
+  ./scripts/ops.sh clean-docker
+  DRY_RUN=false ./scripts/ops.sh clean-docker
+  AGGRESSIVE=true DRY_RUN=false ./scripts/ops.sh clean-docker
   ./scripts/ops.sh verify
   ./scripts/ops.sh smoke
   ./scripts/ops.sh logs
@@ -44,6 +47,8 @@ Environment overrides:
   DEPLOY_LOG_TAIL=50 ./scripts/ops.sh deploy-log
   SNAPSHOT_RETENTION_DAYS=30 ./scripts/ops.sh clean-snapshots
   DRY_RUN=true ./scripts/ops.sh clean-snapshots
+  DRY_RUN=false ./scripts/ops.sh clean-docker
+  AGGRESSIVE=true DRY_RUN=false ./scripts/ops.sh clean-docker
 HELP
 }
 
@@ -74,6 +79,81 @@ show_deployment_log() {
   else
     echo "No deployment log found at logs/deployments.log"
   fi
+}
+
+show_docker_disk() {
+  echo
+  echo "============================================================"
+  echo "Docker Disk Usage"
+  echo "============================================================"
+  docker system df
+
+  echo
+  echo "============================================================"
+  echo "Dangling Images"
+  echo "============================================================"
+  docker image ls --filter dangling=true
+
+  echo
+  echo "============================================================"
+  echo "Stopped Containers"
+  echo "============================================================"
+  docker container ls -a --filter status=exited
+
+  echo
+  echo "============================================================"
+  echo "Docker Volumes"
+  echo "============================================================"
+  docker volume ls
+}
+
+clean_docker() {
+  dry_run="${DRY_RUN:-true}"
+  aggressive="${AGGRESSIVE:-false}"
+
+  echo "Docker cleanup mode"
+  echo "DRY_RUN=$dry_run"
+  echo "AGGRESSIVE=$aggressive"
+  echo
+  echo "This cleanup does not remove Docker volumes."
+  echo "Your Postgres data volume is not targeted by this command."
+  echo
+
+  if [ "$dry_run" != "false" ]; then
+    echo "Dry run preview only. No Docker resources will be deleted."
+    echo
+    show_docker_disk
+    echo
+    echo "To clean stopped containers and dangling images, run:"
+    echo "DRY_RUN=false ./scripts/ops.sh clean-docker"
+    echo
+    echo "To also remove unused non-running images, run:"
+    echo "AGGRESSIVE=true DRY_RUN=false ./scripts/ops.sh clean-docker"
+    return 0
+  fi
+
+  echo "Cleaning stopped containers..."
+  docker container prune -f
+
+  echo
+  echo "Cleaning dangling images..."
+  docker image prune -f
+
+  echo
+  echo "Cleaning build cache..."
+  docker builder prune -f || true
+
+  if [ "$aggressive" = "true" ]; then
+    echo
+    echo "Aggressive cleanup enabled."
+    echo "Removing unused images not attached to running containers..."
+    docker image prune -a -f
+  fi
+
+  echo
+  echo "Docker cleanup complete."
+
+  show_docker_disk
 }
 
 run_doctor_step() {
@@ -285,6 +365,14 @@ case "$command_name" in
 
   clean-snapshots)
     clean_snapshots "$@"
+    ;;
+
+  disk)
+    show_docker_disk
+    ;;
+
+  clean-docker)
+    clean_docker
     ;;
 
   verify)
