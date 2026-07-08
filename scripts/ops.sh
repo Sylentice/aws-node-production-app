@@ -3,36 +3,56 @@ set -euo pipefail
 
 command_name="${1:-help}"
 
+if [ "$#" -gt 0 ]; then
+  shift
+fi
+
 print_help() {
   cat <<HELP
 Usage:
   ./scripts/ops.sh <command>
 
 Commands:
-  help          Show this help menu
-  status        Show app, Git, Docker, and deployment status
-  doctor        Run common health checks and show logs if something fails
-  snapshot      Save a diagnostic snapshot to logs/diagnostics
-  verify        Run strict deployment verification against the current Git commit
-  smoke         Run production smoke tests against the current Git commit
-  ps            Show Docker Compose services and myapp containers
-  logs          Show recent Docker Compose logs
-  deploy-log    Show recent deployment audit log entries
-  version       Show the public /version response
-  ready         Show the public /ready response
+  help             Show this help menu
+  status           Show app, Git, Docker, and deployment status
+  doctor           Run common health checks and show logs if something fails
+  snapshot         Save a diagnostic snapshot to logs/diagnostics
+  snapshots        List saved diagnostic snapshots
+  clean-snapshots  Delete diagnostic snapshots older than the retention period
+  verify           Run strict deployment verification against the current Git commit
+  smoke            Run production smoke tests against the current Git commit
+  ps               Show Docker Compose services and myapp containers
+  logs             Show recent Docker Compose logs
+  deploy-log       Show recent deployment audit log entries
+  version          Show the public /version response
+  ready            Show the public /ready response
 
 Examples:
   ./scripts/ops.sh status
   ./scripts/ops.sh doctor
   ./scripts/ops.sh snapshot
+  ./scripts/ops.sh snapshots
+  ./scripts/ops.sh clean-snapshots
+  ./scripts/ops.sh clean-snapshots 30
+  DRY_RUN=true ./scripts/ops.sh clean-snapshots
   ./scripts/ops.sh verify
   ./scripts/ops.sh smoke
   ./scripts/ops.sh logs
+
+Environment overrides:
+  LOG_TAIL=200 ./scripts/ops.sh logs
+  DEPLOY_LOG_TAIL=50 ./scripts/ops.sh deploy-log
+  SNAPSHOT_RETENTION_DAYS=30 ./scripts/ops.sh clean-snapshots
+  DRY_RUN=true ./scripts/ops.sh clean-snapshots
 HELP
 }
 
 current_commit() {
   git rev-parse HEAD
+}
+
+snapshot_directory() {
+  echo "${SNAPSHOT_DIR:-logs/diagnostics}"
 }
 
 show_docker_logs() {
@@ -122,12 +142,13 @@ run_snapshot_command() {
     echo "$label captured" >> "$snapshot_file"
   else
     exit_code=$?
+    echo >> "$snapshot_file"
     echo "$label failed with exit code $exit_code" >> "$snapshot_file"
   fi
 }
 
 create_snapshot() {
-  snapshot_dir="${SNAPSHOT_DIR:-logs/diagnostics}"
+  snapshot_dir="$(snapshot_directory)"
   timestamp=$(date -u +"%Y%m%dT%H%M%SZ")
   snapshot_file="$snapshot_dir/diagnostic_snapshot_$timestamp.log"
 
@@ -172,6 +193,75 @@ fi
   echo "Diagnostic snapshot saved to: $snapshot_file"
 }
 
+list_snapshots() {
+  snapshot_dir="$(snapshot_directory)"
+
+  echo "Diagnostic snapshot directory: $snapshot_dir"
+
+  if [ ! -d "$snapshot_dir" ]; then
+    echo "No diagnostic snapshot directory found"
+    return 0
+  fi
+
+  snapshot_count=$(find "$snapshot_dir" -type f -name 'diagnostic_snapshot_*.log' | wc -l | tr -d ' ')
+
+  if [ "$snapshot_count" -eq 0 ]; then
+    echo "No diagnostic snapshots found"
+    return 0
+  fi
+
+  echo "Found $snapshot_count diagnostic snapshot(s)"
+  echo
+
+  find "$snapshot_dir" -type f -name 'diagnostic_snapshot_*.log' -printf '%TY-%Tm-%Td %TH:%TM %10s bytes %p\n' | sort -r
+}
+
+clean_snapshots() {
+  snapshot_dir="$(snapshot_directory)"
+  retention_days="${1:-${SNAPSHOT_RETENTION_DAYS:-14}}"
+  dry_run="${DRY_RUN:-false}"
+
+  if ! [[ "$retention_days" =~ ^[0-9]+$ ]]; then
+    echo "Retention days must be a whole number"
+    echo "Example: ./scripts/ops.sh clean-snapshots 30"
+    exit 2
+  fi
+
+  echo "Diagnostic snapshot directory: $snapshot_dir"
+  echo "Retention days: $retention_days"
+
+  if [ ! -d "$snapshot_dir" ]; then
+    echo "No diagnostic snapshot directory found"
+    return 0
+  fi
+
+  echo
+  echo "Snapshots older than $retention_days day(s):"
+
+  old_snapshots=$(find "$snapshot_dir" -type f -name 'diagnostic_snapshot_*.log' -mtime +"$retention_days" -print)
+
+  if [ -z "$old_snapshots" ]; then
+    echo "No old diagnostic snapshots found"
+    return 0
+  fi
+
+  echo "$old_snapshots"
+
+  if [ "$dry_run" = "true" ]; then
+    echo
+    echo "DRY_RUN=true, no files deleted"
+    return 0
+  fi
+
+  echo "$old_snapshots" | while IFS= read -r snapshot; do
+    rm -f "$snapshot"
+    echo "Deleted $snapshot"
+  done
+
+  echo
+  echo "Old diagnostic snapshot cleanup complete"
+}
+
 case "$command_name" in
   help|-h|--help)
     print_help
@@ -187,6 +277,14 @@ case "$command_name" in
 
   snapshot)
     create_snapshot
+    ;;
+
+  snapshots)
+    list_snapshots
+    ;;
+
+  clean-snapshots)
+    clean_snapshots "$@"
     ;;
 
   verify)
