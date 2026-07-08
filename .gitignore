@@ -12,3 +12,7 @@ npm-debug.log
 
 # Rotated log files
 *.log.*
+
+# Local logs and diagnostic snapshots
+logs/
+*.log
