@@ -21,6 +21,7 @@ Commands:
   clean-snapshots  Delete diagnostic snapshots older than the retention period
   disk             Show Docker disk usage and cleanup candidates
   clean-docker     Safely clean stopped containers and dangling Docker images
+  secrets          Check .env safety without printing secret values
   verify           Run strict deployment verification against the current Git commit
   smoke            Run production smoke tests against the current Git commit
   ps               Show Docker Compose services and myapp containers
@@ -36,8 +37,10 @@ Examples:
   ./scripts/ops.sh snapshots
   ./scripts/ops.sh disk
   ./scripts/ops.sh clean-docker
+  ./scripts/ops.sh secrets
   DRY_RUN=false ./scripts/ops.sh clean-docker
   AGGRESSIVE=true DRY_RUN=false ./scripts/ops.sh clean-docker
+  ENV_FILE=.env ./scripts/ops.sh secrets
   ./scripts/ops.sh verify
   ./scripts/ops.sh smoke
   ./scripts/ops.sh logs
@@ -154,6 +157,90 @@ clean_docker() {
   echo "Docker cleanup complete."
 
   show_docker_disk
+}
+
+check_secrets() {
+  env_file="${ENV_FILE:-.env}"
+  required_vars="${REQUIRED_ENV_VARS:-DATABASE_URL JWT_SECRET}"
+  secrets_failed=false
+
+  echo
+  echo "============================================================"
+  echo "Secrets Safety Check"
+  echo "============================================================"
+  echo "Env file: $env_file"
+  echo "Required variables: $required_vars"
+  echo
+  echo "Secret values will not be printed."
+
+  if [ ! -f "$env_file" ]; then
+    echo "$env_file does not exist"
+    exit 1
+  fi
+
+  echo
+  echo "Checking file permissions..."
+
+  permissions=$(stat -c "%a" "$env_file")
+  owner_group=$(stat -c "%U:%G" "$env_file")
+
+  echo "$env_file permissions: $permissions"
+  echo "$env_file owner/group: $owner_group"
+
+  if [ "$permissions" = "600" ]; then
+    echo "File permissions passed"
+  else
+    echo "File permissions failed: expected 600"
+    secrets_failed=true
+  fi
+
+  echo
+  echo "Checking Git ignore status..."
+
+  if git check-ignore -q "$env_file"; then
+    echo "$env_file is ignored by Git"
+  else
+    echo "$env_file is not ignored by Git"
+    secrets_failed=true
+  fi
+
+  echo
+  echo "Checking Git tracking status..."
+
+  if git ls-files --error-unmatch "$env_file" >/dev/null 2>&1; then
+    echo "$env_file is tracked by Git"
+    secrets_failed=true
+  else
+    echo "$env_file is not tracked by Git"
+  fi
+
+  echo
+  echo "Checking required variables..."
+
+  for var_name in $required_vars; do
+    if grep -Eq "^[[:space:]]*$var_name=" "$env_file"; then
+      var_value=$(grep -E "^[[:space:]]*$var_name=" "$env_file" | tail -n 1 | sed -E "s/^[[:space:]]*$var_name=//")
+
+      if [ -n "$var_value" ]; then
+        echo "$var_name is present and non-empty"
+      else
+        echo "$var_name is present but empty"
+        secrets_failed=true
+      fi
+    else
+      echo "$var_name is missing"
+      secrets_failed=true
+    fi
+  done
+
+  if [ "$secrets_failed" = "true" ]; then
+    echo
+    echo "Secrets safety check failed"
+    exit 1
+  fi
+
+  echo
+  echo "Secrets safety check passed"
 }
 
 run_doctor_step() {
@@ -375,6 +462,10 @@ case "$command_name" in
     clean_docker
     ;;
 
+
+  secrets)
+    check_secrets
+    ;;
   verify)
     ./scripts/verify_deployment.sh "$(current_commit)"
     ;;
