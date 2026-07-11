@@ -16,6 +16,7 @@ Commands:
   help             Show this help menu
   status           Show app, Git, Docker, and deployment status
   doctor           Run common health checks and show logs if something fails
+  preflight        Run server readiness checks before deployment
   snapshot         Save a diagnostic snapshot to logs/diagnostics
   snapshots        List saved diagnostic snapshots
   clean-snapshots  Delete diagnostic snapshots older than the retention period
@@ -34,6 +35,7 @@ Commands:
 Examples:
   ./scripts/ops.sh status
   ./scripts/ops.sh doctor
+  ./scripts/ops.sh preflight
   ./scripts/ops.sh snapshot
   ./scripts/ops.sh snapshots
   ./scripts/ops.sh disk
@@ -269,6 +271,8 @@ run_doctor() {
 
   echo "Running ops doctor against commit: $(current_commit)"
 
+  run_doctor_step "Deployment preflight checks" ./scripts/preflight.sh
+
   run_doctor_step "Ready endpoint check" curl -fsS http://localhost/ready
 
   run_doctor_step "Version endpoint check" curl -fsS http://localhost/version
@@ -440,6 +444,10 @@ case "$command_name" in
     ./scripts/deployment_status.sh
     ;;
 
+
+  preflight)
+    ./scripts/preflight.sh
+    ;;
   doctor)
     run_doctor
     ;;
