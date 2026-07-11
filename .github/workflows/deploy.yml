@@ -48,6 +48,9 @@ jobs:
           bash -n scripts/check_env_example.sh
           bash -n scripts/ops.sh
 
+      - name: Validate environment example
+        run: scripts/check_env_example.sh
+
       - name: Build API image
         run: docker build -t myapp-api:ci .
 
