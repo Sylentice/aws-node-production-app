@@ -29,6 +29,7 @@ Commands:
   ps               Show Docker Compose services and myapp containers
   logs             Show recent Docker Compose logs
   deploy-log       Show recent deployment audit log entries
+  last-deploy      Show a summary of the latest deployment events
   version          Show the public /version response
   ready            Show the public /ready response
 
@@ -48,6 +49,7 @@ Examples:
   ./scripts/ops.sh verify
   ./scripts/ops.sh smoke
   ./scripts/ops.sh logs
+  ./scripts/ops.sh last-deploy
 
 Environment overrides:
   LOG_TAIL=200 ./scripts/ops.sh logs
@@ -161,6 +163,59 @@ clean_docker() {
   echo "Docker cleanup complete."
 
   show_docker_disk
+}
+
+show_last_deploy() {
+  deployment_log="${DEPLOY_LOG_FILE:-logs/deployments.log}"
+
+  echo
+  echo "============================================================"
+  echo "Last Deployment Summary"
+  echo "============================================================"
+
+  if [ ! -f "$deployment_log" ]; then
+    echo "No deployment log found at $deployment_log"
+    return 0
+  fi
+
+  echo "Deployment log: $deployment_log"
+  echo
+
+  echo "Current Git commit:"
+  git rev-parse HEAD || true
+
+  echo
+  echo "Current public /version response:"
+  curl -fsS http://localhost/version || true
+  echo
+
+  echo
+  echo "Latest deployment event:"
+  tail -n 1 "$deployment_log"
+
+  echo
+  echo "Latest successful deployment:"
+  latest_success=$(grep 'status=success' "$deployment_log" | tail -n 1 || true)
+
+  if [ -n "$latest_success" ]; then
+    echo "$latest_success"
+  else
+    echo "No successful deployment events found"
+  fi
+
+  echo
+  echo "Latest failed or rollback deployment event:"
+  latest_problem=$(grep -E 'status=(failed|rollback_failed|rollback_success)' "$deployment_log" | tail -n 1 || true)
+
+  if [ -n "$latest_problem" ]; then
+    echo "$latest_problem"
+  else
+    echo "No failed or rollback deployment events found"
+  fi
+
+  echo
+  echo "Recent deployment events:"
+  tail -n "${DEPLOY_LOG_TAIL:-10}" "$deployment_log"
 }
 
 check_secrets() {
@@ -504,6 +559,10 @@ case "$command_name" in
     show_deployment_log
     ;;
 
+
+  last-deploy)
+    show_last_deploy
+    ;;
   version)
     curl -fsS http://localhost/version
     echo
