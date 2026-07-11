@@ -46,6 +46,7 @@ jobs:
           bash -n scripts/install_deployment_logrotate.sh
           bash -n scripts/smoke_test.sh
           bash -n scripts/check_env_example.sh
+          bash -n scripts/preflight.sh
           bash -n scripts/ops.sh
 
       - name: Validate environment example
@@ -112,6 +113,9 @@ jobs:
 
             new_commit=$(git rev-parse HEAD)
             echo "Deploying commit: $new_commit"
+
+            echo "Running deployment preflight checks..."
+            ./scripts/preflight.sh
 
             ./scripts/record_deployment.sh "started" "$new_commit" "$previous_commit" "deployment started"
 
