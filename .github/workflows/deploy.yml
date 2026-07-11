@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -69,6 +70,10 @@ jobs:
           script: |
             set -e
 
+            github_actor="${{ github.actor }}"
+            github_event="${{ github.event_name }}"
+            github_run_id="${{ github.run_id }}"
+
             previous_commit="unknown"
             new_commit="unknown"
             deployment_final_event_recorded=false
@@ -117,7 +122,7 @@ jobs:
             echo "Running deployment preflight checks..."
             ./scripts/preflight.sh
 
-            ./scripts/record_deployment.sh "started" "$new_commit" "$previous_commit" "deployment started"
+            ./scripts/record_deployment.sh "started" "$new_commit" "$previous_commit" "deployment started by $github_actor via $github_event run $github_run_id"
 
             rollback() {
               echo "Deployment failed. Rolling back to previous commit: $previous_commit"
@@ -163,7 +168,7 @@ jobs:
               rollback
             fi
 
-            ./scripts/record_deployment.sh "success" "$new_commit" "$previous_commit" "deployment completed successfully"
+            ./scripts/record_deployment.sh "success" "$new_commit" "$previous_commit" "deployment completed successfully by $github_actor via $github_event run $github_run_id"
 
             echo "Deployment completed successfully for commit: $new_commit"
             docker ps
