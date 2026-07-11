@@ -22,6 +22,7 @@ Commands:
   disk             Show Docker disk usage and cleanup candidates
   clean-docker     Safely clean stopped containers and dangling Docker images
   secrets          Check .env safety without printing secret values
+  env-check        Check .env.example safety without printing secret values
   verify           Run strict deployment verification against the current Git commit
   smoke            Run production smoke tests against the current Git commit
   ps               Show Docker Compose services and myapp containers
@@ -41,6 +42,7 @@ Examples:
   DRY_RUN=false ./scripts/ops.sh clean-docker
   AGGRESSIVE=true DRY_RUN=false ./scripts/ops.sh clean-docker
   ENV_FILE=.env ./scripts/ops.sh secrets
+  ./scripts/ops.sh env-check
   ./scripts/ops.sh verify
   ./scripts/ops.sh smoke
   ./scripts/ops.sh logs
@@ -463,6 +465,10 @@ case "$command_name" in
     ;;
 
 
+
+  env-check)
+    ./scripts/check_env_example.sh
+    ;;
   secrets)
     check_secrets
     ;;

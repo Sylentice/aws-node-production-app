@@ -45,6 +45,7 @@ jobs:
           bash -n scripts/deployment_status.sh
           bash -n scripts/install_deployment_logrotate.sh
           bash -n scripts/smoke_test.sh
+          bash -n scripts/check_env_example.sh
           bash -n scripts/ops.sh
 
       - name: Build API image
